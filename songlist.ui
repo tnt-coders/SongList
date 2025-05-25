@@ -88,7 +88,7 @@
     <item row="1" column="0" colspan="3">
      <widget class="QLineEdit" name="searchBox">
       <property name="placeholderText">
-       <string>Search...</string>
+       <string>Search... (&quot;Artist&quot;, &quot;Song&quot;, or &quot;Artist - Song&quot;)</string>
       </property>
      </widget>
     </item>
