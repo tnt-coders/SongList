@@ -8,6 +8,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
@@ -24,12 +25,41 @@ struct SongList::Impl
     {
         m_ui->setupUi(m_self);
 
+        // Setup song list table headers
+        m_ui->songListTable->setColumnCount(3);
+        m_ui->songListTable->setHorizontalHeaderLabels({"Project", "Artist", "Song"});
+
+        auto header = m_ui->songListTable->horizontalHeader();
+        header->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        header->setSectionResizeMode(2, QHeaderView::Stretch);
+
+        // Hide the "Project" column
+        m_ui->songListTable->setColumnHidden(0, true);
+
         // Initialize data
         this->InitializeLocation();
 
         // Setup slot connections
         QObject::connect(m_ui->changeButton, &QPushButton::clicked, m_self, &SongList::OnChangeButtonClicked);
-        QObject::connect(m_ui->openButton, &QPushButton::clicked, m_self, &SongList::OnOpenButtonClicked);
+        QObject::connect(m_ui->searchBox, &QLineEdit::textChanged, m_self, &SongList::OnSearchBoxTextChanged);
+        QObject::connect(m_ui->songListTable, &QTableWidget::cellDoubleClicked, m_self, &SongList::OnSongListTableCellDoubleClicked);
+    }
+
+    void OnSearchBoxTextChanged(const QString& text)
+    {
+        for (int row = 0; row < m_ui->songListTable->rowCount(); ++row)
+        {
+            bool hidden = true;
+
+            const auto item = m_ui->songListTable->item(row, 0);
+
+            if (item && item->text().contains(text, Qt::CaseInsensitive))
+            {
+                hidden = false;
+            }
+
+            m_ui->songListTable->setRowHidden(row, hidden);
+        }
     }
 
     void OnChangeButtonClicked()
@@ -46,10 +76,10 @@ struct SongList::Impl
         }
     }
 
-    void OnOpenButtonClicked()
+    void OnSongListTableCellDoubleClicked(const int row, const int column)
     {
         // Open the REAPER project and if there is an associated guitar pro file open that too
-        const auto project = m_ui->songListComboBox->currentText();
+        const auto project = m_ui->songListTable->item(row, 0)->text();
         QDir projectDir(m_location.absolutePath() + "/" + project);
 
         const auto files = projectDir.entryList(QDir::Files);
@@ -67,6 +97,7 @@ private:
     void InitializeLocation()
     {
         QFile locationFile(APP_DATA + "/location.dat");
+
         if (locationFile.open(QIODevice::ReadOnly))
         {
             QTextStream inputStream(&locationFile);
@@ -75,6 +106,7 @@ private:
 
             this->UpdateLocation(location, true);
         }
+
         else
         {
             m_ui->locationValueLabel->setText("Select Location...");
@@ -95,6 +127,7 @@ private:
                     outputStream << location.absolutePath();
                     locationFile.close();
                 }
+
                 else
                 {
                     QMessageBox::warning(m_self, "Warning", "Failed to save location to AppData");
@@ -108,16 +141,15 @@ private:
         else
         {
             m_ui->locationValueLabel->setText("Select location...");
-            m_ui->songListComboBox->setEnabled(false);
         }
     }
 
     void PopulateSongList()
     {
         // Clear the song list
-        m_ui->songListComboBox->clear();
+        m_ui->songListTable->clearContents();
 
-        // Populate the song list
+        // Populate the list of available projects
         auto projects = m_location.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
         // Remove projects starting with "__"
@@ -141,18 +173,45 @@ private:
             return true;
         });
 
-        // If projects exist update the combo box and enable the "open" button
+        // If projects exist update the table
         if (projects.length() > 0)
         {
-            m_ui->songListComboBox->addItems(projects);
-            m_ui->songListComboBox->setEnabled(true);
-            m_ui->openButton->setEnabled(true);
-        }
-        else
-        {
-            m_ui->songListComboBox->addItem("No projects found.");
-            m_ui->songListComboBox->setEnabled(false);
-            m_ui->openButton->setEnabled(false);
+            int row = 0;
+            for (const auto project : projects)
+            {
+                // Split artist and song name on "-"
+                auto parts = project.split(" - ", Qt::SkipEmptyParts);
+
+                // Trim blank spaces
+                for (auto& part : parts)
+                {
+                    part = part.trimmed();
+                }
+
+                // Validate result
+                if (parts.size() != 2)
+                {
+                    qDebug() << "Artist/song name could not be extracted for project: " << project;
+                    continue;
+                }
+
+                // Extract the artist and song name
+                const auto artist = parts[0];
+                const auto song = parts[1];
+
+                // Insert a new row
+                m_ui->songListTable->insertRow(row);
+
+                // Build the row
+                m_ui->songListTable->setItem(row, 0, new QTableWidgetItem(project));
+                m_ui->songListTable->setItem(row, 1, new QTableWidgetItem(artist));
+                m_ui->songListTable->setItem(row, 2, new QTableWidgetItem(song));
+
+                row++;
+            }
+
+            m_ui->songListTable->setSortingEnabled(true);
+            m_ui->songListTable->sortItems(1, Qt::AscendingOrder);
         }
     }
 
@@ -174,6 +233,10 @@ void SongList::OnChangeButtonClicked() {
     m_impl->OnChangeButtonClicked();
 }
 
-void SongList::OnOpenButtonClicked() {
-    m_impl->OnOpenButtonClicked();
+void SongList::OnSearchBoxTextChanged(const QString& text) {
+    m_impl->OnSearchBoxTextChanged(text);
+}
+
+void SongList::OnSongListTableCellDoubleClicked(const int row, const int column) {
+    m_impl->OnSongListTableCellDoubleClicked(row, column);
 }

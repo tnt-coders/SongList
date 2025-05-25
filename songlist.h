@@ -13,7 +13,8 @@ public:
 
 public slots:
     void OnChangeButtonClicked();
-    void OnOpenButtonClicked();
+    void OnSearchBoxTextChanged(const QString& text);
+    void OnSongListTableCellDoubleClicked(const int row, const int column);
 
 private:
     struct Impl;
